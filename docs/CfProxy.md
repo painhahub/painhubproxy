@@ -1,0 +1,198 @@
+# Cloudflare Proxy
+
+For data centres that are unreachable directly (e.g. Telegram IPs blocked by
+your ISP), you can use an alternative free routing method: proxying through
+Cloudflare.  **You only need a domain name.**  A default domain is built into
+the application, but you can (and should) replace it with your own.
+
+The proxy restores access to content that was not loading (reactions, certain
+stickers).  If photos/videos were not loading on a non-premium account, remove
+everything except `4:149.154.167.220` from the `DC -> IP` settings and check
+whether the CF proxy fixes it.
+
+## Why set up your own domain?
+
+Cloudflare has limits on concurrent WebSocket connections per domain.  The
+default domain can stop working at any time.
+
+## Setting up your own domain
+
+1. Add your domain to Cloudflare (either registered through them, or by
+   changing the NS servers to Cloudflare's:
+   <https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/>).
+
+2. In **SSL/TLS → Overview** set the mode to **Flexible**.
+
+3. In **DNS → Records** import all records at once using the provided
+   zone file:
+
+   - Click **"Import DNS Records"** (or **Advanced → Import zone file**).
+   - Upload [`cloudflare-dns-import.txt`](cloudflare-dns-import.txt).
+   - After importing, **enable the orange cloud** (Proxy status →
+     Proxied) for every imported record — zone file imports create
+     DNS-only records by default.
+
+   Alternatively, add the following `A` records manually via
+   **+ Add Record**:
+
+   | Name      | IPv4 address      |
+   |-----------|-------------------|
+   | `kws1`    | `149.154.175.50`  |
+   | `kws2`    | `149.154.167.51`  |
+   | `kws3`    | `149.154.175.100` |
+   | `kws4`    | `149.154.167.91`  |
+   | `kws5`    | `149.154.171.5`   |
+   | `kws203`  | `91.105.192.100`  |
+
+   Make sure the **orange cloud** (Proxy status) is **enabled** for each record.
+
+   Older versions of this guide also listed `kws1-1`…`kws203-1`. The proxy no
+   longer queries them — through Cloudflare they reach the same origin as the
+   base record — so they can be deleted.
+
+4. If Cloudflare's own IP ranges are also blocked by your ISP, add your
+   domain to [zapret](https://github.com/Flowseal/zapret-discord-youtube/)
+   or another bypass tool.
+
+5. Pass your domain to `tg-ws-proxy` via `--cf-domain`:
+
+   ```sh
+   tg-ws-proxy --cf-domain yourdomain.com
+   ```
+
+   Multiple domains can be specified as a comma-separated list.  They are
+   tried in the order given (first domain has highest priority):
+
+   ```sh
+   tg-ws-proxy --cf-domain primary.net,backup.com
+   ```
+
+   Or set the environment variable:
+
+   ```sh
+   export TG_CF_DOMAIN=yourdomain.com
+   tg-ws-proxy
+   ```
+
+   If TLS interception prevents `wss://` from connecting, add
+   `--cf-disable-tls` (or `TG_CF_DISABLE_TLS=true`) to use plaintext `ws://` on
+   port 80 for Cloudflare connections. This exposes the HTTP hostname and
+   traffic metadata, so keep the default TLS mode unless required.
+
+## How it works
+
+When `--cf-domain` is configured the proxy:
+
+1. Tries the normal direct WebSocket connection to the Telegram DC first.
+2. If that fails, connects to `kws{N}.{cf_domain}:443` (where `N` is the DC
+   number) for each configured domain in order, twice per domain unless the
+   first attempt timed out.
+   DNS resolves to Cloudflare's anycast IP.
+   Cloudflare terminates TLS and forwards the WebSocket traffic as plain HTTP
+   to the origin (Flexible SSL mode) — which is Telegram's actual DC server.
+   With `--cf-disable-tls`, the client-to-Cloudflare leg instead uses port 80
+   without TLS.
+3. If the CF proxy also fails, falls back to upstream MTProto proxies (if
+   configured) and finally direct TCP.
+
+When no `--dc-ip` is configured for a DC, the CF proxy is tried as the
+**primary** path (before upstreams / TCP fallback). If `--dc-ip` is omitted
+entirely and `--cf-domain` is set, CF proxy becomes the primary path for
+**all** DCs. To try the CF tiers first even for DCs with `--dc-ip`, pin them
+in front of the ladder: `--pinned-upstream cfworker,cfproxy,ws,mtproto,tcp`
+(see [Fallbacks.md](Fallbacks.md#pinning-the-tier-order-per-traffic-class)).
+
+### Preferred Cloudflare IPs
+
+`--cf-ip` bypasses Cloudflare DNS/anycast selection for both regular CF proxy
+and CF Worker connections. Supply one or more tested Cloudflare edge IPv4 or
+IPv6 addresses; each connection rotates the first candidate and then tries the
+whole non-cooling list before failing:
+
+```sh
+tg-ws-proxy --cf-domain yourdomain.com \
+  --cf-ip 104.16.1.1,104.17.2.2,2606:4700::1
+```
+
+The hostname is still used for TLS SNI and HTTP `Host`, so certificate
+verification and routing to `kwsN.yourdomain.com` remain correct. The IP list
+is global because it selects a Cloudflare edge, not a Telegram DC. While set,
+CF connections never fall back to DNS; remove `--cf-ip` to restore normal
+DNS/anycast selection.
+
+The first failure can cost up to **N attempted hostnames × M preferred IPs ×
+`--cf-connect-timeout`**. Edges whose direct TCP connection times out then
+enter `--cf-fail-cooldown`; while all edges are cooling, one rotating candidate
+is still retried so the proxy can recover without a restart.
+
+## Verifying your configuration with `--check`
+
+Before starting the proxy server, you can verify that your CF domain(s) and
+MTProto proxy(ies) are correctly configured with the `--check` flag:
+
+```sh
+tg-ws-proxy --cf-domain yourdomain.com --check
+```
+
+The check attempts a WebSocket connection through `kws2.{domain}` for each CF
+domain and reports the round-trip latency:
+
+```
+============================================================
+  tg-ws-proxy connectivity check
+============================================================
+
+Cloudflare proxy domains (DC2 WebSocket probe):
+  kws2.yourdomain.com                      ... [OK ]  143ms
+
+============================================================
+  Result: all checks passed
+============================================================
+```
+
+If the check fails, the output shows the reason, for example:
+
+```
+  kws2.yourdomain.com                      ... [FAIL]  WebSocket connection failed — check DNS records and Cloudflare settings
+```
+
+Common causes:
+- The DNS A records are missing or not proxied through Cloudflare (orange cloud disabled).
+- SSL/TLS mode is not set to **Flexible** in Cloudflare.
+- Cloudflare's own IP ranges are blocked by your ISP.
+
+The check exits with status code `0` if all probes pass, or `1` if any fail,
+making it suitable for use in scripts or watchdog setups.
+
+## HTTP/2 media multiplexing
+
+Media connections (a negative DC number in the MTProto handshake) prefer
+HTTP/2 when the routing ladder reaches `cfproxy`. Each MTProto envelope becomes
+a POST to `https://kws{N}.{cf_domain}/api`; clients using the same domain and DC
+share one TCP/TLS connection. Ordinary connections, direct Telegram WebSockets
+and Cloudflare Worker tunnels keep their existing transports and priority.
+
+HTTP/2 is enabled by default. Use `--no-h2` or `TG_NO_H2=true` to force media
+back onto WebSocket. `--cf-disable-tls` also selects WebSocket: this path does
+not attempt plaintext HTTP/2. The domain must allow HTTP/2 and POST requests to
+`/api`, in addition to the existing `/apiws` endpoint.
+
+The proxy checks ALPN and sends a HEAD request before using a lane. Failed or
+blocked setup falls back to WebSocket without consuming client packets; failed
+domains enter the existing configurable CF cooldown. If a POST fails after the
+session has started, the native connection closes so Telegram can reconnect;
+consumed packets are not silently moved into a different transport. Small
+recent encrypted requests may be reposted up to three times within 30 seconds
+to retrieve delayed replies; auth-key setup and large upload bodies are never
+replayed.
+
+`--cf-ip`, `--cf-balance`, outbound proxies and certificate verification apply
+to HTTP/2 as well. A pinned `cfproxy` tier includes both HTTP/2 and its WebSocket
+fallback; `--no-h2` disables only the former.
+
+Multiplexing saves sockets but requires complete envelopes for HTTP framing.
+Packets are limited to 4 MiB; each lane allows 16 requests and a shared 16 MiB
+payload budget, with at most four active requests per native client (one slot
+reserved for delayed replies). These limits apply to payloads; TLS/H2 buffers
+and the packet currently being read also consume memory. Backpressure and
+cancellation release stream capacity when clients disconnect.

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The launcher truncates labels around 11 characters, and the same
+         string is the notification title and the QS tile label. -->
+    <string name="app_name">painhubproxy</string>
+    <string name="app_title">painhubproxy</string>
+    <string name="app_tagline">локальный прокси для Telegram</string>
+
+    <string name="section_status">Состояние</string>
+    <string name="section_args">Параметры запуска</string>
+    <string name="section_log">Журнал</string>
+
+    <string name="args_label">Аргументы ядра</string>
+    <string name="args_locked">Остановите прокси, чтобы изменить аргументы</string>
+    <string name="start">Запустить</string>
+    <string name="stop">Остановить</string>
+    <string name="status_running">Работает</string>
+    <string name="status_stopped">Остановлен</string>
+    <string name="status_starting">Запуск…</string>
+    <string name="status_hint_running">Прокси слушает localhost</string>
+    <string name="status_hint_stopped">Нажмите «Запустить», чтобы поднять прокси</string>
+    <string name="open_telegram_link">Открыть ссылку в Telegram</string>
+    <string name="log_label">Журнал</string>
+    <string name="notification_channel">Прокси</string>
+    <string name="telegram_missing">Telegram не установлен</string>
+    <string name="browser_missing">Не найдено приложение браузера</string>
+
+    <string name="open_card">Открыть визитку</string>
+    <string name="card_role">разработчик</string>
+    <string name="card_name">painhahaha</string>
+    <string name="footer">painhubproxy · 2026</string>
+</resources>

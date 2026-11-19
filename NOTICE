@@ -1,0 +1,34 @@
+painhubproxy
+============
+
+Этот репозиторий — форк проекта tg-ws-proxy-rs.
+
+    Upstream:  https://github.com/valnesfjord/tg-ws-proxy-rs
+    Copyright: (c) valnesfjord и участники проекта
+    Лицензия:  MIT (полный текст — в файле LICENSE)
+    Основа:    версия 2.7.0, commit 53f392280a370199ffe5c6ef0ac88808ed17c575
+
+Изменения, внесённые в форке (2026)
+-----------------------------------
+
+Rust-ядро (каталоги src/ и crates/) не изменялось. Все правки находятся
+в Android-оболочке (каталог android/):
+
+  * ProxyService.kt — аргументы запуска: явные --cf-domain и --cf-ip,
+    --cf-disable-tls, --pinned-upstream cfproxy, --pool-size 8;
+    PARTIAL_WAKE_LOCK на время работы; START_REDELIVER_INTENT.
+  * ProxySecret.kt — новый файл: секрет MTProto генерируется один раз и
+    хранится в настройках приложения, в исходниках секрета нет.
+  * BootReceiver.kt — новый файл: автозапуск по BOOT_COMPLETED,
+    QUICKBOOT_POWERON, LOCKED_BOOT_COMPLETED, MY_PACKAGE_REPLACED.
+  * WatchdogReceiver.kt — новый файл: периодическая проверка состояния сервиса.
+  * ProxyAutostart.kt — новый файл: признак «пользователь хочет, чтобы прокси
+    работал», отдельный от факта запуска процесса.
+  * AndroidManifest.xml — разрешения RECEIVE_BOOT_COMPLETED и WAKE_LOCK,
+    регистрация приёмников.
+  * ui/ — собственный интерфейс на Jetpack Compose (тема, статус, параметры,
+    журнал, плитка автора); прежний экран заменён.
+  * res/values/strings.xml, themes.xml — название painhubproxy и тексты.
+
+Проект не связан с Telegram Messenger LLP и не является официальным клиентом
+или сервером Telegram.

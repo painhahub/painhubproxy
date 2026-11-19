@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The screen is always dark (see PainHub palette); the window background
+         matches it so there is no white flash before Compose draws. -->
+    <style name="Theme.TgWsProxy" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#08080A</item>
+        <item name="android:statusBarColor">#08080A</item>
+        <item name="android:navigationBarColor">#08080A</item>
+    </style>
+</resources>
