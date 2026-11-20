@@ -76,6 +76,16 @@ impl Engine {
         matches!(self.state(), State::Running | State::Starting)
     }
 
+    /// Take edited settings without restarting.
+    ///
+    /// The window saves settings and then calls this before `stop`/`start`, so
+    /// the new port, host and arguments are what the restarted listener binds.
+    /// Applying them to a running proxy would change nothing until the next
+    /// start anyway — `Config` is parsed once, at start.
+    pub fn apply_settings(&mut self, settings: Settings) {
+        self.settings = settings;
+    }
+
     pub fn start(&mut self) {
         if self.thread.is_some() {
             return;

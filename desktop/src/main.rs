@@ -1,10 +1,11 @@
-//! painhubproxy for the desktop: a tray app that serves the local MTProto
-//! listener on the Wi-Fi network, so phones reach Telegram through this machine.
+//! painhubproxy for the desktop: a tray app with an administration window that
+//! serves the local MTProto listener on the Wi-Fi network, so phones reach
+//! Telegram through this machine.
 //!
 //! Start-up order matters — settings first (they own the secret and the LAN
-//! address), then logging, then the engine, then the tray. The tray is the last
-//! thing to exist because its callbacks send into a channel that must already
-//! have a reader, which is the loop at the bottom.
+//! address), then logging, then the engine, then the window. The tray icon is
+//! built before `run_native` because it installs the global menu and click
+//! handlers that must exist before the event loop starts dispatching.
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
@@ -12,14 +13,16 @@ mod engine;
 mod platform;
 mod settings;
 mod tray;
+mod ui;
 
 use std::sync::mpsc;
-use std::time::Duration;
 
-use tracing::{info, warn};
+use eframe::egui;
+use tracing::info;
 
-use crate::engine::{Engine, State};
-use crate::tray::{Action, Tray};
+use crate::engine::Engine;
+use crate::settings::Settings;
+use crate::tray::Tray;
 
 fn main() {
     if !platform::claim_single_instance() {
@@ -30,7 +33,7 @@ fn main() {
         return;
     }
 
-    let mut settings = settings::Settings::load_or_create();
+    let settings = Settings::load_or_create();
     platform::init_logging(&settings.log_path(), settings.verbose);
 
     info!(
@@ -43,90 +46,47 @@ fn main() {
     let mut engine = Engine::new(settings.clone());
     engine.start();
 
-    let (actions, incoming) = mpsc::channel::<Action>();
-    let mut tray = match Tray::new(actions, settings.autostart) {
-        Some(tray) => tray,
-        None => {
-            platform::notify(
-                "painhubproxy",
-                "Не удалось создать значок в области уведомлений.",
-            );
-            return;
-        }
+    let (actions_tx, actions_rx) = mpsc::channel();
+    let tray = Tray::new(actions_tx, settings.autostart);
+    if tray.is_none() {
+        info!("значок в трее не создан — управление доступно только из окна");
+    }
+
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1010.0, 720.0])
+        .with_min_inner_size([780.0, 560.0])
+        .with_title("painhubproxy");
+    if let Some(icon) = ui::window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
+
+    let options = eframe::NativeOptions {
+        viewport,
+        ..Default::default()
     };
 
-    let mut shown_state: Option<State> = None;
-    let mut shown_link: Option<String> = None;
+    let result = eframe::run_native(
+        "painhubproxy",
+        options,
+        Box::new(move |cc| {
+            Ok(Box::new(ui::App::new(
+                cc,
+                settings,
+                engine,
+                actions_rx,
+                tray,
+            )))
+        }),
+    );
 
-    loop {
-        platform::pump_messages();
-
-        let mut quit = false;
-        while let Ok(action) = incoming.try_recv() {
-            match action {
-                Action::CopyLink => match engine.link() {
-                    Some(link) => {
-                        platform::copy_text(&link);
-                        info!("ссылка скопирована: {link}");
-                    }
-                    None => warn!("ссылки ещё нет — прокси не запущен"),
-                },
-                Action::OpenTelegram => match engine.link() {
-                    Some(link) => {
-                        info!("открываю ссылку в Telegram");
-                        platform::open_url(&link);
-                    }
-                    None => warn!("ссылки ещё нет — прокси не запущен"),
-                },
-                Action::Toggle => {
-                    if engine.is_active() {
-                        info!("остановка по команде из меню");
-                        engine.stop();
-                    } else {
-                        info!("запуск по команде из меню");
-                        engine.start();
-                    }
-                }
-                Action::Restart => {
-                    info!("перезапуск прокси");
-                    engine.stop();
-                    engine.start();
-                }
-                Action::OpenLog => platform::open_path(&settings.log_path()),
-                Action::OpenConfig => platform::open_path(&settings.config_path()),
-                Action::ToggleAutostart => {
-                    let next = !settings.autostart;
-                    match platform::set_autostart(next) {
-                        Ok(()) => {
-                            settings.autostart = next;
-                            settings.save();
-                            tray.set_autostart(next);
-                            info!("автозапуск: {}", if next { "включён" } else { "выключен" });
-                        }
-                        Err(e) => warn!("не удалось изменить автозапуск: {e}"),
-                    }
-                }
-                Action::Quit => quit = true,
-            }
+    match result {
+        Ok(()) => info!("окно закрыто, выход"),
+        Err(e) => {
+            tracing::error!("не удалось открыть окно: {e}");
+            platform::notify(
+                "painhubproxy",
+                &format!("Не удалось открыть окно интерфейса:\n{e}"),
+            );
         }
-
-        if quit {
-            info!("выход");
-            engine.stop();
-            return;
-        }
-
-        let state = engine.state();
-        let link = engine.link();
-        if shown_state.as_ref() != Some(&state) || shown_link != link {
-            tray.refresh(&state, link.as_deref());
-            shown_state = Some(state);
-            shown_link = link;
-        }
-
-        // The message pump only dispatches what has already arrived, so the
-        // loop still has to sleep; 50 ms is invisible for a tray menu and keeps
-        // the process at effectively zero CPU.
-        std::thread::sleep(Duration::from_millis(50));
     }
 }

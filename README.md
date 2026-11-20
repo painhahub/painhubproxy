@@ -31,8 +31,9 @@
 .\scripts\build-desktop.ps1   # → dist\painhubproxy-desktop.exe
 ```
 
-Работает в области уведомлений, окна не открывает. Подробности, формат настроек и
-подключение телефона — в [docs/Desktop.md](docs/Desktop.md).
+Работает в области уведомлений; окно администрирования открывается кликом по значку и
+показывает отдельную ссылку и QR-код для каждого сетевого адреса. Подробности, формат
+настроек и подключение телефона — в [docs/Desktop.md](docs/Desktop.md).
 
 ## Что изменено относительно upstream
 
@@ -52,6 +53,7 @@ Rust-ядро (`src/`, `crates/`) не изменялось ни на строк
 | `android/app/src/main/res/mipmap-*` | иконка приложения (adaptive, все плотности) |
 | `android/app/src/main/AndroidManifest.xml` | разрешения `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, регистрация приёмников, `@mipmap/ic_launcher` |
 | `desktop/` | новый крейт `painhubproxy-desktop`: трей-приложение для Windows, LAN-listener, настройки в `%APPDATA%` |
+| `desktop/src/ui/` | окно администрирования (egui): статус, ссылка и QR-код на каждый сетевой адрес, настройки, журнал |
 | `scripts/build-desktop.ps1` | сборка десктопной версии |
 | `docs/Desktop.md` | описание десктопной версии |
 | `.github/` | удалён: CI-конфигурация upstream проверяет инварианты оригинального интерфейса и запускает эмулятор, для этого форка она неприменима |

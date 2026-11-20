@@ -175,26 +175,9 @@ mod os {
         (unsafe { GetLastError() }) != ERROR_ALREADY_EXISTS
     }
 
-    /// Dispatch every pending window message; the tray icon and its menu live on
-    /// hidden windows of this thread, so this is what makes clicks arrive.
-    pub fn pump_messages() {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
-        };
-
-        let mut msg: MSG = unsafe { std::mem::zeroed() };
-        loop {
-            let pending =
-                unsafe { PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) };
-            if pending == 0 {
-                break;
-            }
-            unsafe {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
-    }
+    // Message pumping is no longer done here: the window is created by winit,
+    // whose event loop dispatches every message of this thread — including the
+    // tray icon's and its menu's, which is why tray clicks still arrive.
 
     pub fn copy_text(text: &str) {
         use windows_sys::Win32::System::DataExchange::{
@@ -252,6 +235,59 @@ mod os {
             return;
         }
         open_url(&path.to_string_lossy());
+    }
+
+    /// Bring the main window to the front.
+    ///
+    /// The window belongs to winit, which does not expose its handle, so the
+    /// right one is found by walking this process's top-level windows — it is
+    /// the only one with a caption (the tray and its menu are captionless
+    /// helper windows). Raw Win32 on purpose: the tray callback runs inside the
+    /// message dispatch, and showing a window is exactly what the shell expects
+    /// there, while touching egui state from that callback would not be.
+    pub fn show_main_window() {
+        use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible,
+            SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
+        };
+
+        struct Search {
+            pid: u32,
+            found: isize,
+        }
+
+        unsafe extern "system" fn visit(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let search = unsafe { &mut *(lparam as *mut Search) };
+            let mut pid = 0u32;
+            unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+            if pid != search.pid {
+                return 1;
+            }
+            if unsafe { GetWindowTextLengthW(hwnd) } == 0 {
+                return 1;
+            }
+            search.found = hwnd as isize;
+            0
+        }
+
+        let mut search = Search {
+            pid: std::process::id(),
+            found: 0,
+        };
+
+        unsafe {
+            EnumWindows(Some(visit), &mut search as *mut Search as LPARAM);
+            if search.found == 0 {
+                return;
+            }
+            let hwnd = search.found as HWND;
+            if IsWindowVisible(hwnd) == 0 {
+                ShowWindow(hwnd, SW_SHOW);
+            }
+            ShowWindow(hwnd, SW_RESTORE);
+            SetForegroundWindow(hwnd);
+        }
     }
 
     pub fn notify(title: &str, text: &str) {
@@ -323,8 +359,6 @@ mod os {
         true
     }
 
-    pub fn pump_messages() {}
-
     pub fn copy_text(text: &str) {
         let candidates: [(&str, &[&str]); 3] = [
             ("wl-copy", &[]),
@@ -353,6 +387,8 @@ mod os {
         open_url(&path.to_string_lossy());
     }
 
+    pub fn show_main_window() {}
+
     pub fn notify(title: &str, text: &str) {
         eprintln!("{title}: {text}");
     }
@@ -362,7 +398,9 @@ mod os {
     }
 }
 
-pub use os::{claim_single_instance, copy_text, notify, open_path, open_url, pump_messages, set_autostart};
+pub use os::{
+    claim_single_instance, copy_text, notify, open_path, open_url, set_autostart, show_main_window,
+};
 
 #[cfg(test)]
 mod tests {

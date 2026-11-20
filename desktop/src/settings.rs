@@ -136,6 +136,14 @@ impl Settings {
         platform::config_path()
     }
 
+    /// Replace the secret with a fresh random one.
+    ///
+    /// The caller is expected to warn the user: Telegram keeps the *old* link,
+    /// so changing the secret invalidates the proxy entry on every device.
+    pub fn regenerate_secret(&mut self) {
+        self.secret = generate_secret();
+    }
+
     pub fn log_path(&self) -> PathBuf {
         platform::log_path()
     }

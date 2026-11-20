@@ -16,6 +16,8 @@ use crate::platform;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
+    ShowWindow,
+    ShowDevices,
     CopyLink,
     OpenTelegram,
     Toggle,
@@ -36,6 +38,8 @@ pub struct Tray {
 impl Tray {
     pub fn new(actions: Sender<Action>, autostart: bool) -> Option<Self> {
         let status = MenuItem::new("Запуск…", false, None);
+        let open_window = MenuItem::new("Открыть окно", true, None);
+        let devices = MenuItem::new("Подключение (QR-коды)", true, None);
         let copy = MenuItem::new("Копировать ссылку", true, None);
         let open = MenuItem::new("Открыть в Telegram", true, None);
         let toggle = MenuItem::new("Остановить", true, None);
@@ -48,6 +52,9 @@ impl Tray {
         let menu = Menu::new();
         menu.append_items(&[
             &status,
+            &PredefinedMenuItem::separator(),
+            &open_window,
+            &devices,
             &PredefinedMenuItem::separator(),
             &copy,
             &open,
@@ -64,6 +71,8 @@ impl Tray {
         .ok()?;
 
         let mut ids: HashMap<MenuId, Action> = HashMap::new();
+        ids.insert(open_window.id().clone(), Action::ShowWindow);
+        ids.insert(devices.id().clone(), Action::ShowDevices);
         ids.insert(copy.id().clone(), Action::CopyLink);
         ids.insert(open.id().clone(), Action::OpenTelegram);
         ids.insert(toggle.id().clone(), Action::Toggle);
@@ -80,8 +89,8 @@ impl Tray {
             }
         }));
 
-        // Left click is the shortest path to "use it": open the link in
-        // Telegram. The menu stays on right click.
+        // A left click is the shortest path back to the window the user just
+        // minimised; "copy link" and "open in Telegram" stay in the menu.
         TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
@@ -89,7 +98,7 @@ impl Tray {
                 ..
             } = event
             {
-                let _ = actions.send(Action::OpenTelegram);
+                let _ = actions.send(Action::ShowWindow);
             }
         }));
 
