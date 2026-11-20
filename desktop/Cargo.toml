@@ -1,0 +1,43 @@
+[package]
+name = "painhubproxy-desktop"
+version = "1.0.0"
+edition = "2021"
+description = "Tray app that runs the MTProto WS bridge proxy for the local Wi-Fi network"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "painhubproxy"
+path = "src/main.rs"
+
+[dependencies]
+tg-ws-proxy-rs = { path = ".." }
+
+# The core is async; the tray app owns a two-worker runtime on its own thread.
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "fmt",
+    "registry",
+] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+rand = "0.9"
+
+tray-icon = "0.21"
+muda = "0.17"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }

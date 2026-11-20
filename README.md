@@ -1,9 +1,14 @@
 # painhubproxy
 
-Android-приложение, которое поднимает **локальный MTProto-прокси** для Telegram прямо на
-телефоне. Telegram подключается к `127.0.0.1:1443`, приложение держит исходящее соединение
-с инфраструктурой Telegram через WebSocket-мост. Компьютер, отдельный сервер и локальная
-сеть не нужны.
+**Локальный MTProto-прокси** для Telegram: поднимается либо на телефоне, либо на
+компьютере и отдаётся устройствам в локальной сети.
+
+- **Android** — Telegram подключается к `127.0.0.1:1443`. Компьютер, сервер и сеть не нужны.
+- **Windows** — прокси слушает `0.0.0.0:1443`, телефоны в той же Wi-Fi подключаются по
+  адресу компьютера. Это единственный способ дать прокси iPhone: iOS не позволяет
+  обычному приложению держать локальный порт в фоне.
+
+В обоих случаях исходящее соединение идёт через WebSocket-мост к инфраструктуре Telegram.
 
 Основа — [`tg-ws-proxy-rs`](https://github.com/valnesfjord/tg-ws-proxy-rs) v2.7.0
 (commit `53f3922`): Rust-ядро и штатная Android-оболочка. Здесь лежит их форк с
@@ -18,9 +23,21 @@ Android-приложение, которое поднимает **локальн
   сборка для Google Play, автоматических обновлений нет;
 - сборок под другие ABI пока нет.
 
+### Windows
+
+Десктопная версия собирается из исходников, готовых сборок в Releases нет:
+
+```powershell
+.\scripts\build-desktop.ps1   # → dist\painhubproxy-desktop.exe
+```
+
+Работает в области уведомлений, окна не открывает. Подробности, формат настроек и
+подключение телефона — в [docs/Desktop.md](docs/Desktop.md).
+
 ## Что изменено относительно upstream
 
-Только Android-оболочка. Rust-ядро (`src/`, `crates/`) не изменялось ни на строку.
+Rust-ядро (`src/`, `crates/`) не изменялось ни на строку. Всё остальное — Android-оболочка
+и новый десктопный крейт.
 
 | Файл | Изменение |
 |---|---|
@@ -34,6 +51,9 @@ Android-приложение, которое поднимает **локальн
 | `android/app/src/main/res/values/strings.xml` | название приложения `painhubproxy`, тексты |
 | `android/app/src/main/res/mipmap-*` | иконка приложения (adaptive, все плотности) |
 | `android/app/src/main/AndroidManifest.xml` | разрешения `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, регистрация приёмников, `@mipmap/ic_launcher` |
+| `desktop/` | новый крейт `painhubproxy-desktop`: трей-приложение для Windows, LAN-listener, настройки в `%APPDATA%` |
+| `scripts/build-desktop.ps1` | сборка десктопной версии |
+| `docs/Desktop.md` | описание десктопной версии |
 | `.github/` | удалён: CI-конфигурация upstream проверяет инварианты оригинального интерфейса и запускает эмулятор, для этого форка она неприменима |
 
 Полный список правок смотрите в истории коммитов этого репозитория.
@@ -94,6 +114,15 @@ copy target\aarch64-linux-android\release\libtg_ws_proxy_jni.so `
 cd android
 .\gradlew.bat :app:assembleDebug -PTG_ANDROID_ABIS=arm64-v8a -x :app:cargoNdk
 ```
+
+### Десктопная версия (Windows)
+
+```powershell
+.\scripts\build-desktop.ps1
+```
+
+Нужен только Rust с тем же тулчейном: JDK, Android SDK и NDK для неё не требуются.
+Готовый файл — `dist\painhubproxy-desktop.exe`.
 
 ## Использование
 

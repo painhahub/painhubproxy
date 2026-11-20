@@ -21,7 +21,7 @@ version_code = 207000
 # the root package the only thing a bare build/test/clippy touches; the Android
 # Gradle task asks for the shim by name with `-p`.
 [workspace]
-members = ["crates/android-jni"]
+members = ["crates/android-jni", "desktop"]
 default-members = ["."]
 
 [[bin]]
