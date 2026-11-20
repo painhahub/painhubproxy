@@ -30,5 +30,16 @@ Rust-ядро (каталоги src/ и crates/) не изменялось. Вс
     журнал, плитка автора); прежний экран заменён.
   * res/values/strings.xml, themes.xml — название painhubproxy и тексты.
 
+Десктопная версия для Windows (каталог desktop/, новый; ядро тоже не
+изменялось):
+
+  * main.rs, engine.rs, settings.rs, platform.rs, tray.rs — значок в области
+    уведомлений, запуск и остановка ядра без перезапуска процесса, настройки
+    в %APPDATA%\painhubproxy, автозапуск через HKCU\...\Run.
+  * ui/ — окно администрирования на egui; theme.rs повторяет токены и
+    компоненты Android-темы (ui/Theme.kt, ui/Components.kt), qr.rs рисует
+    QR-код для каждого сетевого адреса машины.
+  * probe.rs — новый файл: измерение TCP-задержки до адресов из --cf-ip.
+
 Проект не связан с Telegram Messenger LLP и не является официальным клиентом
 или сервером Telegram.

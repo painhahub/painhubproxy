@@ -127,11 +127,6 @@ fn classify(name: &str) -> Kind {
     }
 }
 
-/// Human-readable address, used in the tray tooltip.
-pub fn address_of(ip: &str, port: u16) -> String {
-    format!("{ip}:{port}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

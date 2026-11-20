@@ -20,6 +20,7 @@ use tracing::info;
 
 use crate::engine::{Engine, State};
 use crate::platform;
+use crate::probe::Prober;
 use crate::settings::Settings;
 use crate::tray::{Action, Tray};
 
@@ -49,6 +50,8 @@ impl Tab {
 pub struct App {
     pub settings: Settings,
     pub engine: Engine,
+    /// Measures the Cloudflare leg; read-only for the window.
+    pub prober: Prober,
     pub tab: Tab,
     /// Last user-visible feedback line ("Ссылка скопирована", errors, …).
     pub note: String,
@@ -79,10 +82,12 @@ impl App {
 
         let log_text = read_tail(&settings.log_path(), 96 * 1024);
         let endpoints = links::endpoints();
+        let prober = Prober::start(settings.cf_ips(), settings.cf_port());
 
         Self {
             settings,
             engine,
+            prober,
             tab: Tab::Home,
             note: String::new(),
             dirty: false,
@@ -174,20 +179,27 @@ impl App {
     pub fn save_settings(&mut self) {
         self.settings.save();
         self.dirty = false;
-        self.endpoints = links::endpoints();
-        self.qr_cache.clear();
+        self.refresh_targets();
         self.note = "Настройки сохранены".into();
     }
 
     pub fn save_and_restart(&mut self) {
         self.settings.save();
         self.dirty = false;
-        self.endpoints = links::endpoints();
-        self.qr_cache.clear();
+        self.refresh_targets();
         self.engine.apply_settings(self.settings.clone());
         self.engine.stop();
         self.engine.start();
         self.note = "Настройки сохранены, прокси перезапущен".into();
+    }
+
+    /// Re-derive everything that depends on saved settings: the address list,
+    /// the cached QR matrices, and the addresses the latency probe dials.
+    fn refresh_targets(&mut self) {
+        self.endpoints = links::endpoints();
+        self.qr_cache.clear();
+        self.prober
+            .retarget(self.settings.cf_ips(), self.settings.cf_port());
     }
 
     fn handle_actions(&mut self, ctx: &egui::Context) {
@@ -242,12 +254,18 @@ impl eframe::App for App {
         self.sync_tray();
         self.header(ctx);
 
-        egui::CentralPanel::default().show(ctx, |ui| match self.tab {
-            Tab::Home => pages::home(self, ui),
-            Tab::Devices => pages::devices(self, ui),
-            Tab::Settings => pages::settings(self, ui),
-            Tab::Log => pages::log(self, ui),
-        });
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::none()
+                    .fill(palette::BG)
+                    .inner_margin(egui::Margin::same(20.0)),
+            )
+            .show(ctx, |ui| match self.tab {
+                Tab::Home => pages::home(self, ui),
+                Tab::Devices => pages::devices(self, ui),
+                Tab::Settings => pages::settings(self, ui),
+                Tab::Log => pages::log(self, ui),
+            });
 
         // A tray app is idle most of the time. The proxy does not need the
         // event loop at all — it runs on its own thread — so the window only has
@@ -262,39 +280,44 @@ impl eframe::App for App {
 
 impl App {
     fn header(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("header").show(ctx, |ui| {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("painhubproxy").size(18.0).strong());
-                ui.add_space(8.0);
-                let state = self.engine.state();
-                let color = match state {
-                    State::Running => palette::OK,
-                    State::Starting => palette::WARN,
-                    State::Failed(_) => palette::BAD,
-                    State::Stopped => palette::MUTED,
-                };
-                palette::status_line(ui, color, &state.label());
-            });
+        egui::TopBottomPanel::top("header")
+            .frame(
+                egui::Frame::none()
+                    .fill(palette::BG)
+                    .inner_margin(egui::Margin::same(20.0)),
+            )
+            .show(ctx, |ui| {
+                ui.label(
+                    egui::RichText::new("painhubproxy")
+                        .size(24.0)
+                        .strong()
+                        .color(palette::INK),
+                );
+                ui.label(
+                    egui::RichText::new("прокси для Telegram по локальной сети")
+                        .size(13.0)
+                        .color(palette::MUTED),
+                );
 
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                for tab in [Tab::Home, Tab::Devices, Tab::Settings, Tab::Log] {
-                    if ui
-                        .selectable_label(self.tab == tab, tab.label())
-                        .clicked()
-                    {
-                        self.tab = tab;
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    for tab in [Tab::Home, Tab::Devices, Tab::Settings, Tab::Log] {
+                        if palette::nav_item(ui, self.tab == tab, tab.label()).clicked() {
+                            self.tab = tab;
+                        }
+                        ui.add_space(10.0);
                     }
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if !self.note.is_empty() {
-                        ui.label(egui::RichText::new(&self.note).size(11.5).color(palette::MUTED));
-                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if !self.note.is_empty() {
+                            ui.label(
+                                egui::RichText::new(&self.note)
+                                    .size(11.0)
+                                    .color(palette::MUTED),
+                            );
+                        }
+                    });
                 });
             });
-            ui.add_space(6.0);
-        });
     }
 
     /// Push state into the tray menu, but only when it actually changed:

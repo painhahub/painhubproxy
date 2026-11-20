@@ -13,12 +13,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::platform;
 
-/// Works on the network this app was written for: the ISP drops TLS whose SNI
-/// starts with `kws`, so the Cloudflare proxy tier is reached over `ws://` on
-/// port 80 instead. On an unrestricted network the plain ladder
-/// (`--default-domains --cf-balance`) is the better choice — see
-/// `docs/Desktop.md`.
-const DEFAULT_EXTRA_ARGS: &str =
+/// Domains that answered fastest from this network, taken from the community
+/// list. Spelled out instead of `--default-domains`: the latter fetches the
+/// whole list from GitHub on every start, which stalls startup for ten seconds
+/// behind a filtering ISP and then balances across domain names that answer
+/// several hundred milliseconds slower.
+///
+/// The edges below answered in 30–65 ms here, against ~200 ms for the anycast
+/// address DNS hands out. Without them the desktop proxy adds roughly half a
+/// second of round trip that the Android build does not have.
+///
+/// These are deliberately the same arguments the Android build ships: same
+/// core, same route, same numbers.
+const DEFAULT_EXTRA_ARGS: &str = concat!(
+    "--cf-domain noskomnadzor.co.uk,lovetrue.co.uk,kartoshka.co.uk,",
+    "fixtelega.co.uk,stopblocking.co.uk,nothingthere.co.uk ",
+    "--cf-balance --cf-disable-tls ",
+    "--cf-ip 104.18.0.1,162.159.140.1,104.17.1.1 ",
+    "--pool-size 8 ",
+    "--pinned-upstream cfproxy"
+);
+
+/// What desktop builds before this one wrote into `config.json`. Only an exact
+/// match is upgraded, so hand-edited arguments are never overwritten.
+const LEGACY_EXTRA_ARGS: &str =
     "--default-domains --cf-balance --pinned-upstream cfproxy --cf-disable-tls";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +90,15 @@ impl Settings {
         };
 
         let mut changed = !existed;
+
+        // Upgrade the argument set written by older desktop builds. Matched
+        // exactly, so anyone who edited the arguments keeps their edit; the
+        // window and `config.json` both say what the proxy is started with.
+        if settings.extra_args.trim() == LEGACY_EXTRA_ARGS {
+            settings.extra_args = DEFAULT_EXTRA_ARGS.to_string();
+            changed = true;
+            tracing::info!("upgrading stored arguments to the low-latency set");
+        }
 
         if settings.link_ip.trim().is_empty() {
             if let Some(ip) = platform::detect_lan_ip() {
@@ -130,6 +157,56 @@ impl Settings {
         }
 
         parts.join(" ")
+    }
+
+    /// Cloudflare edge addresses pinned by `--cf-ip`, as the latency probe
+    /// should dial them.
+    ///
+    /// The probe checks exactly the addresses the core will use, so the number
+    /// in the window is the round trip the proxy actually pays — not a ping to
+    /// something merely nearby. Accepts both `--cf-ip a,b` and `--cf-ip=a,b`.
+    pub fn cf_ips(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut tokens = self.extra_args.split_whitespace().peekable();
+
+        while let Some(token) = tokens.next() {
+            let rest = if token == "--cf-ip" {
+                match tokens.next() {
+                    Some(value) => value,
+                    None => break,
+                }
+            } else if let Some(value) = token.strip_prefix("--cf-ip=") {
+                value
+            } else {
+                continue;
+            };
+
+            for part in rest.split(',') {
+                let part = part.trim();
+                if !part.is_empty() && !out.iter().any(|seen| seen == part) {
+                    out.push(part.to_string());
+                }
+            }
+        }
+
+        out
+    }
+
+    /// Port the Cloudflare tier is reached on.
+    ///
+    /// `--cf-disable-tls` makes the core speak plaintext `ws://`, which is port
+    /// 80 — measuring 443 there would report a number for a socket the proxy
+    /// never opens.
+    pub fn cf_port(&self) -> u16 {
+        let plaintext = self
+            .extra_args
+            .split_whitespace()
+            .any(|token| token == "--cf-disable-tls");
+        if plaintext {
+            80
+        } else {
+            443
+        }
     }
 
     pub fn config_path(&self) -> PathBuf {

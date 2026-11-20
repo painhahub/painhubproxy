@@ -11,6 +11,7 @@
 
 mod engine;
 mod platform;
+mod probe;
 mod settings;
 mod tray;
 mod ui;
