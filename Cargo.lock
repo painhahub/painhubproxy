@@ -2288,7 +2288,7 @@ dependencies = [
 
 [[package]]
 name = "painhubproxy-desktop"
-version = "1.0.0"
+version = "2.7.1"
 dependencies = [
  "eframe",
  "hex",
@@ -3128,7 +3128,7 @@ dependencies = [
 
 [[package]]
 name = "tg-ws-proxy-rs"
-version = "2.7.0"
+version = "2.7.1"
 dependencies = [
  "aes",
  "async-http-proxy",

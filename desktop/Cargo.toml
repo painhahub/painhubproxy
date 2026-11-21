@@ -1,6 +1,6 @@
 [package]
 name = "painhubproxy-desktop"
-version = "1.0.0"
+version = "2.7.1"
 edition = "2021"
 description = "Tray app that runs the MTProto WS bridge proxy for the local Wi-Fi network"
 license = "MIT"
