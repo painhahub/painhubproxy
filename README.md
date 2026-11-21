@@ -17,18 +17,18 @@
 ## Скачать
 
 Обе платформы лежат в одном релизе —
-[Releases → v2.7.0](https://github.com/painhahub/painhubproxy/releases/latest).
+[Releases → v2.7.1](https://github.com/painhahub/painhubproxy/releases/latest).
 
 | Платформа | Файл | Требования |
 |---|---|---|
-| Android | `painhubproxy-2.7.0-arm64-v8a.apk` | Android 8.0+, `arm64-v8a` |
-| Windows | `painhubproxy-2.7.0-windows-x64.exe` | Windows 10 / 11, x64, portable |
+| Android | `painhubproxy-2.7.1-arm64-v8a.apk` | Android 8.0+, `arm64-v8a` |
+| Windows | `painhubproxy-2.7.1-windows-x64.exe` | Windows 10 / 11, x64, portable |
 
 Общее для обоих файлов:
 
-- сборки не подписаны доверенным сертификатом, поэтому система покажет предупреждение:
-  APK подписан отладочным ключом (`CN=Android Debug`), exe — без подписи вовсе.
-  Сверяйте SHA-256 из описания релиза;
+- APK подписан собственным release-ключом (`CN=painhubproxy`), `debuggable`
+  отсутствует; exe не подписан сертификатом Authenticode, поэтому SmartScreen
+  может показать «неизвестный издатель». Сверяйте SHA-256 из описания релиза;
 - автоматических обновлений нет, новая версия ставится вручную;
 - сборок под другие ABI и платформы пока нет.
 
